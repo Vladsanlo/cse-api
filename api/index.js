@@ -1,6 +1,6 @@
 const express = require('express');
 
-const index=require('./services/index')
+const routerApi=require('./services/index')
 
 // const cors = require('cors');
 
@@ -23,9 +23,7 @@ const options = {
   }
 }
 
-// app.use(cors());
-
-//routerApi(app)
+routerApi(app);
 
 app.get('/api', (req, res) => {
   res.send('Api de la serie Common Side Effects');
