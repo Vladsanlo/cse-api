@@ -18,10 +18,21 @@ router.get('/:id', (req, res) => {
 
   res.json({
     id: id,
-    name: 'jose',
+    name: 'marshal cuso',
     type: 'employee',
   })
 })
+
+router.get('/:id', (req, res) => {
+  const { id } = req.params;
+
+  res.json({
+    id: id,
+    name: 'frances applewhite',
+    type: 'employee',
+  })
+})
+
 
 
 module.exports = CharactersService
