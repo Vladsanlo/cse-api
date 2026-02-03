@@ -117,4 +117,23 @@ router.patch('/:id', async (req, res) => {
   }
 })
 
+// DELETE /api/v1/characters/:id
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query('DELETE FROM characters WHERE id = $1 RETURNING *', [id]);
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Character not found' });
+    }
+    
+    res.json({ message: 'Character deleted', deleted: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
+
 module.exports = router;
