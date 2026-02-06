@@ -1,102 +1,79 @@
-const express = require('express');
-const router = express.Router();
+const db = require('./query.service');
 
-const db = require('./query.service')
+class CharactersService {
+  constructor() {
+    // Mapeo de campos: API Key -> Database Column
+    this.columnMapping = {
+      name: 'character_name',
+      status: 'status_id', // Ajustado a status_id por la normalización
+      deadCount: 'times_dead',
+      shroomCount: 'times_shroom_taken',
+      image: 'pfp'
+    };
+  }
 
-router.get('/', async (req, res) => {
-  try {
+  async getAll() {
     const queryText = `
       SELECT 
         c.id, 
-        c.character_name, 
+        c.character_name AS name, 
         s.status, 
-        c.times_dead, 
-        c.times_shroom_taken, 
-        c.pfp
+        c.times_dead AS "deadCount", 
+        c.times_shroom_taken AS "shroomCount", 
+        c.pfp AS image
       FROM characters c
-      JOIN character_status s ON c.status = s.id
+      JOIN character_status s ON c.status_id = s.id
       ORDER BY c.id ASC
     `;
     const { rows } = await db.query(queryText);
-
-    res.json(rows);
-  } catch (err) {
-
-    console.error(err);
-
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-})
-
-router.get('/:id', async (req, res) => {
-  const { id } = req.params;
-
-  const queryText = `
-    SELECT * FROM characters WHERE id = $1
-  `
-
-  const { rows } = await db.query(queryText, [id])
-
-  if (rows.length === 1)
-    res.json(rows[0])
-  else
-    res.json({ error: 'Not found' })
-})
-
-router.post('/', async (req, res) => {
-  const { name, status, times_dead, times_shroom_taken, pfp } = req.body;
-  const newCharacter = [name, status, times_dead, times_shroom_taken, pfp]
-
-  const queryText = `
-    INSERT INTO characters (
-      character_name,
-      status,
-      times_dead,
-      times_shroom_taken,
-      pfp
-    ) VALUES (
-      $1, $2, $3, $4, $5
-    )
-  `
-
-  await db.query(queryText, newCharacter);
-
-  res.json(newCharacter)
-})
-
-router.patch('/:id', async (req, res) => {
-  const { id } = req.params;
-  const body = req.body;
-
-  // 1. Map req.body keys to Database column names
-  const mapping = {
-    name: 'character_name',
-    status: 'status',
-    deadCount: 'times_dead',
-    shroomCount: 'times_shroom_taken',
-    image: 'pfp'
-  };
-
-  const columnsToUpdate = [];
-  const values = [];
-
-  // 2. Build the query based on mapped keys
-  Object.keys(mapping).forEach((apiKey) => {
-    if (body[apiKey] !== undefined) {
-      const dbColumn = mapping[apiKey];
-      columnsToUpdate.push(`${dbColumn} = $${values.length + 1}`);
-      values.push(body[apiKey]);
-    }
-  });
-
-  if (columnsToUpdate.length === 0) {
-    return res.status(400).json({ error: 'No valid fields provided' });
+    return rows;
   }
 
-  // Add the ID as the final parameter
-  values.push(id);
+  async getById(id) {
+    const queryText = `
+      SELECT 
+        c.id, 
+        c.character_name AS name, 
+        s.status, 
+        c.times_dead AS "deadCount", 
+        c.times_shroom_taken AS "shroomCount", 
+        c.pfp AS image
+      FROM characters c
+      JOIN character_status s ON c.status_id = s.id
+      WHERE c.id = $1
+    `;
+    const { rows } = await db.query(queryText, [id]);
+    return rows[0] || null;
+  }
 
-  try {
+  async create(data) {
+    const { name, status, deadCount, shroomCount, image } = data;
+    const queryText = `
+      INSERT INTO characters (
+        character_name, status_id, times_dead, times_shroom_taken, pfp
+      ) VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, character_name AS name;
+    `;
+    const values = [name, status, deadCount || 0, shroomCount || 0, image];
+    const { rows } = await db.query(queryText, values);
+    return rows[0];
+  }
+
+  async update(id, body) {
+    const columnsToUpdate = [];
+    const values = [];
+
+    Object.keys(this.columnMapping).forEach((apiKey) => {
+      if (body[apiKey] !== undefined) {
+        const dbColumn = this.columnMapping[apiKey];
+        columnsToUpdate.push(`${dbColumn} = $${values.length + 1}`);
+        values.push(body[apiKey]);
+      }
+    });
+
+    if (columnsToUpdate.length === 0) return null;
+
+    values.push(id);
     const queryText = `
       UPDATE characters 
       SET ${columnsToUpdate.join(', ')} 
@@ -105,35 +82,14 @@ router.patch('/:id', async (req, res) => {
     `;
 
     const { rows } = await db.query(queryText, values);
-
-    if (rows.length === 0) {
-      return res.status(404).json({ error: 'Character not found' });
-    }
-
-    res.json(rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Database error' });
+    return rows[0] || null;
   }
-})
 
-// DELETE /api/v1/characters/:id
-router.delete('/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await db.query('DELETE FROM characters WHERE id = $1 RETURNING *', [id]);
-    
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Character not found' });
-    }
-    
-    res.json({ message: 'Character deleted', deleted: result.rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  async delete(id) {
+    const queryText = 'DELETE FROM characters WHERE id = $1 RETURNING *';
+    const { rows, rowCount } = await db.query(queryText, [id]);
+    return rowCount > 0 ? rows[0] : null;
   }
-});
+}
 
-
-
-
-module.exports = router;
+module.exports = new CharactersService(); // Exportamos una instancia
